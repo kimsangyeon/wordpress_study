@@ -9,8 +9,9 @@ Author URI: http://URI_Of_The_Plugin_Author
 License: A "Slug" license name e.g. GPL2
 */
 
-/* add_shortcode
- *
+/* add_shortcode (shortcode 이름, 실행 함수 이름)
+ * 이 함수는 워드 프레스에서 제공하는 숏 코드 기능을 제공
+ * shortcode 이름으로 함수를 실행하면 결과값이 해당 부분에 표시됨
  * */
 function testShortCode() {
 ?>
