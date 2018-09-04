@@ -33,14 +33,20 @@ add_shortcode('dolly', 'dollyShortCode');
  * 첫번째 파라미터 wp_enqueue_scripts : 스크립트가 큐에 올라간 타이밍 페이지 상단에서 헤더부분 만들어질때 이 스크립트가 추가 된다
  * 두번째 파라미터는 함수를 호출
  * */
-function addscript() {
-    // wp_enqueue_script: 헤더에 스크립트를 추가 하는 함수, 스크립트 이름과 파일 주소가 필요
-    // plugins_url 현재 제작하고있는 플러그인의 주소를 찾아옴
-//    wp_enqueue_script('', plugins_url('/js/my.js', __FILE__));
-    wp_enqueue_script('', plugins_url('/js/synapeditor.js', __FILE__));
-    wp_enqueue_style('', plugins_url('/css/synapeditor.css', __FILE__));
+function addStaticFile() {
+//     wp_enqueue_script: 헤더에 스크립트를 추가 하는 함수, 스크립트 이름과 파일 주소가 필요
+//     plugins_url 현재 제작하고있는 플러그인의 주소를 찾아옴
+//     wp_enqueue_script('', plugins_url('/js/my.js', __FILE__));
+//
+//     wp_enqueue_style('synap_editor_css', plugins_url('/css/synapeditor.css', __FILE__));
+    wp_register_style('synap_editor_css', plugin_dir_url( __FILE__ ) . 'css/synapeditor.css');
+    wp_enqueue_style('synap_editor_css');
+
+//    wp_enqueue_script('synap_editor_js', plugins_url('/js/synapeditor.js', __FILE__));
+    wp_register_script('synap_editor_js', plugin_dir_url( __FILE__ ) . 'js/synapeditor.js');
+    wp_enqueue_script('synap_editor_js');
 }
-add_action('wp_enqueue_scripts', 'addscript');
+add_action('wp_enqueue_scripts', 'addStaticFile');
 
 
 /**
