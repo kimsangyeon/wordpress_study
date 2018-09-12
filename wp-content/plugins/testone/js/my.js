@@ -1,1 +1,0 @@
-alert('hello this is my.js');
