@@ -34,7 +34,7 @@ function synap_upload_files() {
             // The image was uploaded successfully!
             $file_path      = wp_get_attachment_url( $attachment_id );
             $response       = new StdClass;
-            $response->link = $file_path;
+            $response->uploadPath = $file_path;
 
             echo stripslashes( json_encode( $response ) );
         }
@@ -53,12 +53,7 @@ function initSynapEditor() {
     echo ("<script language=javascript>
             window.onload = function () {
                 if (SynapEditor) {
-                    window.editor = new SynapEditor('content', {
-                        importAPI: `./import.php`,
-                        imageUploadAPI: `$path`,
-                        videoUploadAPI: `$path`,
-                        fileUploadAPI: `$path`
-                    });
+                    window.editor = new SynapEditor('content');
                     window.editor.openHTML(document.getElementById('editor-content').innerHTML);
                 }
             }
