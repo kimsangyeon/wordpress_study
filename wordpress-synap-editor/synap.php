@@ -60,6 +60,30 @@ function initSynapEditor() {
            </script>");
 }
 
+function myplugin_register_options_page() {
+    add_options_page('Page Title', 'SynapEditor', 'manage_options', 'myplugin', 'myplugin_options_page');
+}
+
+function myplugin_options_page()
+{
+    ?>
+    <div>
+        <?php screen_icon(); ?>
+        <h2>SynapEditor Option</h2>
+        <form method="post" action="options.php">
+            <?php settings_fields( 'myplugin_options_group' ); ?>
+            <table>
+                <tr valign="top">
+                    <th scope="row"><label for="myplugin_option_name">Label</label></th>
+                    <td><input type="text" id="myplugin_option_name" name="myplugin_option_name" value="<?php echo get_option('myplugin_option_name'); ?>" /></td>
+                </tr>
+            </table>
+            <?php  submit_button(); ?>
+        </form>
+    </div>
+    <?php
+}
+
 add_action('init', 'remove_post_default_editor'); // plugin API init: WordPress가로드를 완료 한 후 모든 헤더가 전송되기 전에 발생합니다.
 add_action('admin_enqueue_scripts', 'enqueue_styles'); // admin_enqueue_scripts : 관리 페이지에 CSS 및 / 또는 Javascript 문서 세트를로드
 add_action('admin_enqueue_scripts','enqueue_scripts');
@@ -71,4 +95,5 @@ add_action('wp_ajax_synap_upload_files', 'synap_upload_files');
 add_action('wp_ajax_nopriv_synap_upload_files', 'synap_upload_files');
 
 // 타이틀 필드의 뒤에서 발생합니다.
-add_action('edit_form_after_title', 'initSynapEditor' );
+add_action('edit_form_after_title', 'initSynapEditor' );// Option page 등
+add_action('admin_menu', 'myplugin_register_options_page');
