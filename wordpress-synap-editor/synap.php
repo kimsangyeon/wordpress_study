@@ -8,92 +8,218 @@ Author: kimsangyeon
 Author URI: http://URI_Of_The_Plugin_Author
 License: A "Slug" license name e.g. GPL2
 */
-function remove_post_default_editor() {
-    remove_post_type_support('post', 'editor');
-}
 
-function enqueue_styles() {
-    wp_register_style('synap_editor_css', plugin_dir_url( __FILE__ ) . 'css/synapeditor.css');
-    wp_enqueue_style('synap_editor_css');
-}
+class SynapEditor
+{
+    /**
+     * Holds the values to be used in the fields callbacks
+     */
+    private $options;
 
-function enqueue_scripts() {
-    wp_register_script('synap_editor_js', plugin_dir_url( __FILE__ ) . 'js/synapeditor.js');
-    wp_enqueue_script('synap_editor_js');
-}
+    /**
+     * Start up
+     */
+    public function __construct()
+    {
+        add_action('init', array( $this, 'remove_post_default_editor')); // plugin API init: WordPress가로드를 완료 한 후 모든 헤더가 전송되기 전에 발생합니다.
+        add_action('admin_enqueue_scripts', array( $this, 'enqueue_styles')); // admin_enqueue_scripts : 관리 페이지에 CSS 및 / 또는 Javascript 문서 세트를로드
+        add_action('admin_enqueue_scripts', array( $this, 'enqueue_scripts'));
 
-function synap_upload_files() {
-    if ($_FILES) {
+        add_action( 'admin_menu', array( $this, 'add_plugin_page' ) );
+        add_action( 'admin_init', array( $this, 'page_init' ) );
 
-        // Let WordPress handle the upload.
-        $attachment_id = media_handle_upload( 'file', 0 );
+        // 타이틀 필드의 뒤에서 발생합니다.
+        add_action('edit_form_after_title', array( $this, 'initSynapEditor'));
 
-        if ( is_wp_error( $attachment_id ) ) {
-            // There was an error uploading the image.
-        } else {
-            // The image was uploaded successfully!
-            $file_path      = wp_get_attachment_url( $attachment_id );
-            $response       = new StdClass;
-            $response->uploadPath = $file_path;
+        // 워드프레스 2.8 이후로 wp_ajax_(action) 과 같은 hook이 생겼습니다.
+        add_action('wp_ajax_synap_upload_files', array( $this, 'synap_upload_files'));
 
-            echo stripslashes( json_encode( $response ) );
-        }
+        // 로그인 하지 않은 사용자들에게 실행되는 ajax 액션 입니다.
+        add_action('wp_ajax_nopriv_synap_upload_files', array( $this, 'synap_upload_files'));
     }
-    exit();
-    wp_die();
-}
 
-function initSynapEditor() {
-    $post = get_post(get_the_ID());
-    $content = apply_filters('the_content', $post->post_content);
-    $path = admin_url('admin-ajax.php');
+    /**
+     * Add options page
+     */
+    public function add_plugin_page()
+    {
+        // This page will be under "Settings"
+        add_options_page(
+            'Settings Admin',
+            'SynapEditor Settings',
+            'manage_options',
+            'my-setting-admin',
+            array( $this, 'create_admin_page' )
+        );
+    }
 
-    echo "<textarea id='content' name='content' style='display: none;'></textarea>" ;
-    echo "<div id='editor-content' style='display: none;'>$content</div>" ;
-    echo ("<script language=javascript>
+    /**
+     * Options page callback
+     */
+    public function create_admin_page()
+    {
+        // Set class property
+        $this->options = get_option( 'synap_option' );
+        ?>
+        <div class="wrap">
+            <h1>My Settings</h1>
+            <form method="post" action="options.php">
+                <?php
+                // This prints out all hidden setting fields
+                settings_fields( 'synap_option_group' );
+                do_settings_sections( 'my-setting-admin' );
+                submit_button();
+                ?>
+            </form>
+        </div>
+        <?php
+    }
+
+    public function remove_post_default_editor() {
+        remove_post_type_support('post', 'editor');
+    }
+
+    /**
+     * Register and add settings
+     */
+    public function page_init()
+    {
+        register_setting(
+            'synap_option_group', // Option group
+            'synap_option', // Option name
+            array( $this, 'sanitize' ) // Sanitize
+        );
+
+        add_settings_section(
+            'setting_section_id', // ID
+            'My Custom Settings', // Title
+            array( $this, 'print_section_info' ), // Callback
+            'my-setting-admin' // Page
+        );
+
+        add_settings_field(
+            'editor.size.width', // Width
+            'Editor Width',
+            array( $this, 'editor_width_callback' ), // Callback
+            'my-setting-admin', // Page
+            'setting_section_id' // Section
+        );
+
+        add_settings_field(
+            'editor.size.height',
+            'Editor Height',
+            array( $this, 'editor_height_callback' ),
+            'my-setting-admin',
+            'setting_section_id'
+        );
+    }
+
+    public function initSynapEditor() {
+        $post = get_post(get_the_ID());
+        $content = apply_filters('the_content', $post->post_content);
+        $this->options = get_option( 'synap_option' );
+        $width = $this->options['editor.size.width'];
+        $height = $this->options['editor.size.height'];
+
+        echo "<textarea id='content' name='content' style='display: none;'></textarea>" ;
+        echo "<div id='editor-content' style='display: none;'>$content</div>" ;
+        echo ("<script language=javascript>
             window.onload = function () {
                 if (SynapEditor) {
-                    window.editor = new SynapEditor('content');
+                    const options = {};
+                                        
+                    if (Number.isInteger($width)) {
+                        options['editor.size.width'] = $width + 'px';
+                    }      
+                    if (Number.isInteger($height)) {
+                        options['editor.size.height'] = $height + 'px';
+                    }
+
+                    window.editor = new SynapEditor('content', options);
                     window.editor.openHTML(document.getElementById('editor-content').innerHTML);
                 }
             }
            </script>");
+    }
+
+    /**
+     * Sanitize each setting field as needed
+     *
+     * @param array $input Contains all settings fields as array keys
+     */
+    public function sanitize( $input )
+    {
+        $new_input = array();
+        if( isset( $input['editor.size.width'] ) )
+            $new_input['editor.size.width'] = absint( $input['editor.size.width'] );
+
+        if( isset( $input['editor.size.height'] ) )
+            $new_input['editor.size.height'] = sanitize_text_field( $input['editor.size.height'] );
+
+        return $new_input;
+    }
+
+    /**
+     * Print the Section text
+     */
+    public function print_section_info()
+    {
+        print 'Enter your settings below:';
+    }
+
+    /**
+     * Get the settings option array and print one of its values
+     */
+    public function editor_width_callback()
+    {
+        echo $this->options['editor.size.width'];
+        printf(
+            '<input type="text" id="editor.size.width" name="synap_option[editor.size.width]" value="%s" />',
+            isset( $this->options['editor.size.width'] ) ? esc_attr( $this->options['editor.size.width']) : ''
+        );
+    }
+
+    /**
+     * Get the settings option array and print one of its values
+     */
+    public function editor_height_callback()
+    {
+        printf(
+            '<input type="text" id="editor.size.height" name="synap_option[editor.size.height]" value="%s" />',
+            isset( $this->options['editor.size.height'] ) ? esc_attr( $this->options['editor.size.height']) : ''
+        );
+    }
+
+    public function enqueue_styles() {
+        wp_register_style('synap_editor_css', plugin_dir_url( __FILE__ ) . 'css/synapeditor.css');
+        wp_enqueue_style('synap_editor_css');
+    }
+
+    public function enqueue_scripts() {
+        wp_register_script('synap_editor_js', plugin_dir_url( __FILE__ ) . 'js/synapeditor.js');
+        wp_enqueue_script('synap_editor_js');
+    }
+
+    public function synap_upload_files() {
+        if ($_FILES) {
+
+            // Let WordPress handle the upload.
+            $attachment_id = media_handle_upload( 'file', 0 );
+
+            if ( is_wp_error( $attachment_id ) ) {
+                // There was an error uploading the image.
+            } else {
+                // The image was uploaded successfully!
+                $file_path      = wp_get_attachment_url( $attachment_id );
+                $response       = new StdClass;
+                $response->uploadPath = $file_path;
+
+                echo stripslashes( json_encode( $response ) );
+            }
+        }
+        exit();
+        wp_die();
+    }
 }
 
-function myplugin_register_options_page() {
-    add_options_page('Page Title', 'SynapEditor', 'manage_options', 'myplugin', 'myplugin_options_page');
-}
-
-function myplugin_options_page()
-{
-    ?>
-    <div>
-        <?php screen_icon(); ?>
-        <h2>SynapEditor Option</h2>
-        <form method="post" action="options.php">
-            <?php settings_fields( 'myplugin_options_group' ); ?>
-            <table>
-                <tr valign="top">
-                    <th scope="row"><label for="myplugin_option_name">Label</label></th>
-                    <td><input type="text" id="myplugin_option_name" name="myplugin_option_name" value="<?php echo get_option('myplugin_option_name'); ?>" /></td>
-                </tr>
-            </table>
-            <?php  submit_button(); ?>
-        </form>
-    </div>
-    <?php
-}
-
-add_action('init', 'remove_post_default_editor'); // plugin API init: WordPress가로드를 완료 한 후 모든 헤더가 전송되기 전에 발생합니다.
-add_action('admin_enqueue_scripts', 'enqueue_styles'); // admin_enqueue_scripts : 관리 페이지에 CSS 및 / 또는 Javascript 문서 세트를로드
-add_action('admin_enqueue_scripts','enqueue_scripts');
-
-// 워드프레스 2.8 이후로 wp_ajax_(action) 과 같은 hook이 생겼습니다.
-add_action('wp_ajax_synap_upload_files', 'synap_upload_files');
-
-// 로그인 하지 않은 사용자들에게 실행되는 ajax 액션 입니다.
-add_action('wp_ajax_nopriv_synap_upload_files', 'synap_upload_files');
-
-// 타이틀 필드의 뒤에서 발생합니다.
-add_action('edit_form_after_title', 'initSynapEditor' );// Option page 등
-add_action('admin_menu', 'myplugin_register_options_page');
+$synapEditor = new SynapEditor();
