@@ -8,6 +8,111 @@ Author: kimsangyeon
 Author URI: http://URI_Of_The_Plugin_Author
 License: A "Slug" license name e.g. GPL2
 */
+$file_server_path = realpath(__FILE__);
+$server_path = str_replace(basename(__FILE__), "", $file_server_path);
+
+$GLOBALS['CONVERT_SERVER'] = "http://synapeditor.iptime.org:7419/convertDocToPb";
+$GLOBALS['ZIP_FILE_PATH'] = $server_path."uploadFile/doc/zip/";
+$GLOBALS['UNZIP_FILE_PATH'] = $server_path."uploadFile/doc/unzip/";
+
+function synap_import_file() {
+    $valid_formats = array("doc", "docx");
+    $data = array();
+    $data['success'] = false;
+
+    $name = $_FILES['file']['name'];
+    $tmp_name = $_FILES['file']['tmp_name'];
+    $type = $_FILES['file']['type'];
+    $size = $_FILES['file']['size'];
+
+    if (strlen($name)) {
+        list($txt, $ext) = explode(".", $name);
+
+        if (in_array(strtolower($ext),$valid_formats)) {
+            $result = getConvertToPbData($tmp_name, $type, $name, $size);
+            $fp = fopen($GLOBALS['ZIP_FILE_PATH'] . "document.word.pb.zip", 'w');
+            fwrite($fp, $result);
+            fclose($fp);
+
+            ob_clean();
+
+            $pbFilePath = unzipFile();
+            $serializedData = getSerializePbData($pbFilePath);
+
+            $data['serializedData'] = $serializedData;
+            $data['success'] = true;
+
+        } else {
+            $data['error'] = "Invalid file format..";
+        }
+    } else {
+        $data['error'] = "Please select file..!";
+    }
+
+
+    echo stripslashes( json_encode($data) );
+
+    exit();
+    wp_die();
+}
+
+
+function getConvertToPbData($tmp_name, $type, $name, $size) {
+    $headers = array("Content-Type:multipart/form-data");
+    $curl_file = curl_file_create($tmp_name, $type, $name);
+    $post_fields = array(
+        'file' => $curl_file);
+
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_HEADER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $post_fields);
+    curl_setopt($ch, CURLOPT_INFILESIZE, $size);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_URL, $GLOBALS['CONVERT_SERVER']);
+
+    $response = curl_exec($ch);
+    $header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+    $header = substr($response, 0, $header_size);
+
+    curl_close ($ch);
+
+    return substr($response, $header_size);
+}
+
+function unzipFile() {
+    $zip = new ZipArchive;
+    $pbFilePath = $GLOBALS['UNZIP_FILE_PATH']."document.word.pb";
+    $res = $zip->open($GLOBALS['ZIP_FILE_PATH']."document.word.pb.zip");
+
+    if ($res === TRUE) {
+        $zip->extractTo($GLOBALS['UNZIP_FILE_PATH']);
+        $zip->close();
+    } else {
+        echo 'fail unzip file ...';
+    }
+
+    return $pbFilePath;
+}
+
+function getSerializePbData($pbFilePath) {
+    $serializedData = array();
+
+    $fb = fopen($pbFilePath, 'rb');
+    if ($fb) {
+        $contents = zlib_decode(stream_get_contents($fb, -1, 16));
+        $data = unpack('C*', $contents);
+
+        for ($i = 1; $i < sizeof($data); $i++) {
+            array_push($serializedData, $data[$i] & 0xFF);
+        }
+    }
+
+    fclose($fb);
+
+    return $serializedData;
+}
 
 class SynapEditor
 {
@@ -36,6 +141,8 @@ class SynapEditor
 
         // 로그인 하지 않은 사용자들에게 실행되는 ajax 액션 입니다.
         add_action('wp_ajax_nopriv_synap_upload_files', array( $this, 'synap_upload_files'));
+
+        add_action('wp_ajax_synap_import_file', 'synap_import_file');
     }
 
     /**
@@ -172,7 +279,6 @@ class SynapEditor
      */
     public function editor_width_callback()
     {
-        echo $this->options['editor.size.width'];
         printf(
             '<input type="text" id="editor.size.width" name="synap_option[editor.size.width]" value="%s" />',
             isset( $this->options['editor.size.width'] ) ? esc_attr( $this->options['editor.size.width']) : ''
